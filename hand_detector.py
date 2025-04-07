@@ -2,76 +2,58 @@ import cv2
 import mediapipe as mp
 import time
 
-# Variables de configuración
-cap = cv2.VideoCapture(0)
-mpHands = mp.solutions.hands
-hands = mpHands.Hands(
-    static_image_mode=False,
-    max_num_hands=2,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
-mpDraw = mp.solutions.drawing_utils
-pTime = 0
-
-def check_peace_sign(hand_landmarks):
-    # Definir los puntos de referencia para las puntas de los dedos
-    finger_tips = [4, 8, 12, 16, 20]  # Pulgar, índice, medio, anular, meñique
-    
-    # Verificar si el pulgar está cerrado (comparación con la base del pulgar)
-    thumb_closed = hand_landmarks.landmark[finger_tips[0]].x < hand_landmarks.landmark[finger_tips[0]-1].x
-    
-    # Verificar si el índice está levantado
-    index_up = hand_landmarks.landmark[finger_tips[1]].y < hand_landmarks.landmark[finger_tips[1]-2].y
-    
-    # Verificar si el medio está levantado
-    middle_up = hand_landmarks.landmark[finger_tips[2]].y < hand_landmarks.landmark[finger_tips[2]-2].y
-    
-    # Verificar si el anular está cerrado
-    ring_closed = hand_landmarks.landmark[finger_tips[3]].y > hand_landmarks.landmark[finger_tips[3]-2].y
-    
-    # Verificar si el meñique está cerrado
-    pinky_closed = hand_landmarks.landmark[finger_tips[4]].y > hand_landmarks.landmark[finger_tips[4]-2].y
-    
-    # Devolver verdadero solo si índice y medio están levantados y el resto cerrados
-    return index_up and middle_up and thumb_closed and ring_closed and pinky_closed
-
-def main():
-    global pTime
-    
-    while True:
-        success, img = cap.read()
-        if not success:
-            break
+class HandGestureDetector:
+    def __init__(self):
+        """Inicializa el detector de gestos de manos"""
+        # Inicializar módulos de MediaPipe
+        self.mp_hands = mp.solutions.hands
+        self.hands = self.mp_hands.Hands()
+        self.mp_draw = mp.solutions.drawing_utils
         
-        img = cv2.flip(img, 1)  # Espejo
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = hands.process(imgRGB)
+        # Variable para FPS
+        self.p_time = 0
+    
+    def find_hands(self, img):
+        """Detecta manos en la imagen y dibuja los landmarks"""
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        self.results = self.hands.process(img_rgb)
         
-        if results.multi_hand_landmarks:
-            for handLms in results.multi_hand_landmarks:
-                # Dibujar puntos de la mano
-                mpDraw.draw_landmarks(img, handLms, mpHands.HAND_CONNECTIONS)
-                
-                # Verificar si se está haciendo el signo de paz (índice y medio arriba, resto abajo)
-                if check_peace_sign(handLms):
+        if self.results.multi_hand_landmarks:
+            for hand_lms in self.results.multi_hand_landmarks:
+                self.mp_draw.draw_landmarks(img, hand_lms, self.mp_hands.HAND_CONNECTIONS)
+        
+        return img
+    
+    def check_peace_sign(self, hand_landmarks):
+        """Verifica si la mano está haciendo el signo de paz (índice y medio arriba, anular y meñique abajo)"""
+        # Puntos de referencia para las puntas de los dedos
+        # 8, 12, 16, 20 = puntas del índice, medio, anular, meñique
+        
+        # Verificar posición de cada dedo (excepto pulgar)
+        index_up = hand_landmarks.landmark[8].y < hand_landmarks.landmark[6].y
+        middle_up = hand_landmarks.landmark[12].y < hand_landmarks.landmark[10].y
+        ring_closed = hand_landmarks.landmark[16].y > hand_landmarks.landmark[14].y
+        pinky_closed = hand_landmarks.landmark[20].y > hand_landmarks.landmark[18].y
+        
+        # Índice y medio arriba, anular y meñique abajo
+        return index_up and middle_up and ring_closed and pinky_closed
+    
+    def process_gestures(self, img):
+        """Detecta el gesto de paz en la imagen"""
+        if self.results.multi_hand_landmarks:
+            for hand_lms in self.results.multi_hand_landmarks:
+                if self.check_peace_sign(hand_lms):
                     cv2.putText(img, "SIGNO DE PAZ DETECTADO!", 
                               (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
-        # Mostrar FPS
-        cTime = time.time()
-        fps = 1 / (cTime - pTime)
-        pTime = cTime
+        return img
+    
+    def show_fps(self, img):
+        """Muestra los FPS en la imagen"""
+        current_time = time.time()
+        fps = 1 / (current_time - self.p_time)
+        self.p_time = current_time
+        
         cv2.putText(img, f"{int(fps)}", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
         
-        # Mostrar imagen
-        cv2.imshow("Hand Tracking", img)
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    
-    cap.release()
-    cv2.destroyAllWindows()
-
-if __name__ == "__main__":
-    main()
+        return img
