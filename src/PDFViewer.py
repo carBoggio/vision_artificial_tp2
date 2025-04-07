@@ -6,30 +6,39 @@ from PIL import Image, ImageTk
 import fitz  # PyMuPDF
 
 class PDFViewer:
-    def __init__(self, root, pdf_path=None):
-        self.root = root
+    def __init__(self):
+        # Crear la ventana principal
+        self.root = tk.Tk()
         self.root.title("Visor de PDF")
         self.root.geometry("800x600")
         
-        # Variables
+        # Variables de estado
         self.pdf_document = None
         self.pages = []
         self.current_page = 0
         self.running = False
         self.zoom_factor = 1.0
         
-        # Interfaz
-        self.canvas = tk.Canvas(root, bg="gray")
+        # Interfaz gráfica
+        self._setup_ui()
+        
+        # Configurar eventos
+        self._setup_events()
+    
+    def _setup_ui(self):
+        """Configura los elementos de la interfaz de usuario"""
+        # Canvas principal para mostrar el PDF
+        self.canvas = tk.Canvas(self.root, bg="gray")
         self.canvas.pack(fill=tk.BOTH, expand=True)
         
         # Botones (simplificados)
-        self.btn_frame = tk.Frame(root)
+        self.btn_frame = tk.Frame(self.root)
         self.btn_frame.pack(fill=tk.X, pady=5)
         
         self.btn_open = tk.Button(self.btn_frame, text="Abrir PDF", command=self.open_pdf)
         self.btn_open.pack(side=tk.LEFT, padx=5)
         
-        self.btn_stop = tk.Button(self.btn_frame, text="Detener", command=self.stop_slideshow, state=tk.DISABLED)
+        self.btn_stop = tk.Button(self.btn_frame, text="Detener", command=self.stop, state=tk.DISABLED)
         self.btn_stop.pack(side=tk.LEFT, padx=5)
         
         # Control de zoom
@@ -48,22 +57,29 @@ class PDFViewer:
         # Etiqueta de estado
         self.status = tk.Label(self.btn_frame, text="No hay documento cargado")
         self.status.pack(side=tk.RIGHT, padx=10)
-        
-        # Cargar PDF si se proporciona una ruta
-        if pdf_path and os.path.exists(pdf_path):
-            self.load_pdf(pdf_path)
-            
-        # Configurar teclas de navegación
-        self.root.bind("<Left>", lambda e: self.prev_page())
-        self.root.bind("<Right>", lambda e: self.next_page())
-        self.root.bind("<space>", lambda e: self.toggle_slideshow())
-        self.root.bind("<Escape>", lambda e: self.stop_slideshow())
+    
+    def _setup_events(self):
+        """Configura los eventos del teclado y de la ventana"""
+        # Eventos de teclado
+        self.root.bind("<Left>", lambda e: self.prev())
+        self.root.bind("<Right>", lambda e: self.next())
+        self.root.bind("<space>", lambda e: self.toggle_running())
+        self.root.bind("<Escape>", lambda e: self.stop())
         self.root.bind("<plus>", lambda e: self.zoom_in())
         self.root.bind("<minus>", lambda e: self.zoom_out())
+        
+        # Evento de redimensionar
+        self.root.bind("<Configure>", self._on_resize)
+    
+    def _on_resize(self, event):
+        """Maneja el evento de redimensionado de la ventana"""
+        if self.pdf_document:
+            # Esperar un momento para que la ventana se estabilice
+            self.root.after(100, self.show_current_page)
     
     def open_pdf(self):
-        """Abre un archivo PDF a través del diálogo de selección de archivos"""
-        self.stop_slideshow()
+        """Abre un archivo PDF a través del diálogo de archivos"""
+        self.stop()
         
         file_path = filedialog.askopenfilename(
             title="Seleccionar PDF",
@@ -76,9 +92,6 @@ class PDFViewer:
     def load_pdf(self, file_path):
         """Carga un documento PDF desde la ruta especificada"""
         try:
-            # Detener la presentación actual si existe
-            self.stop_slideshow()
-            
             # Cerrar documento anterior si existe
             if self.pdf_document:
                 self.pdf_document.close()
@@ -103,9 +116,6 @@ class PDFViewer:
             self.zoom_factor = 1.0
             self.zoom_label.config(text="100%")
             
-            # Habilitar botón de detener
-            self.btn_stop.config(state=tk.NORMAL)
-            
             # Actualizar título de la ventana
             filename = os.path.basename(file_path)
             self.root.title(f"Visor de PDF - {filename}")
@@ -113,8 +123,8 @@ class PDFViewer:
             # Mostrar primera página
             self.show_current_page()
             
-            # Iniciar la presentación automáticamente
-            self.start_slideshow()
+            # Inicialmente no está en modo automático
+            self.running = False
             
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo cargar el PDF: {str(e)}")
@@ -183,63 +193,63 @@ class PDFViewer:
         # Actualizar estado
         total_pages = len(self.pdf_document)
         self.status.config(text=f"Página {self.current_page + 1} de {total_pages}")
+        
+        # Actualizar la ventana
+        self.root.update_idletasks()
     
-    def next_page(self):
+    def next(self):
         """Avanza a la siguiente página"""
         if not self.pdf_document:
             return
             
         if self.current_page < len(self.pdf_document) - 1:
             self.current_page += 1
-            self.show_current_page()
+        else:
+            # Volver al principio cuando se llega al final
+            self.current_page = 0
+            
+        self.show_current_page()
     
-    def prev_page(self):
+    def prev(self):
         """Retrocede a la página anterior"""
         if not self.pdf_document:
             return
             
         if self.current_page > 0:
             self.current_page -= 1
-            self.show_current_page()
+        else:
+            # Ir a la última página cuando se está en la primera
+            self.current_page = len(self.pdf_document) - 1
+            
+        self.show_current_page()
     
-    def toggle_slideshow(self):
+    def toggle_running(self):
         """Alterna entre iniciar y detener la presentación"""
         if self.running:
-            self.stop_slideshow()
+            self.stop()
         else:
-            self.start_slideshow()
+            self.running = True
+            self.btn_stop.config(state=tk.NORMAL)
     
-    def start_slideshow(self):
-        """Inicia la presentación automática"""
-        if not self.pdf_document or self.running:
-            return
-            
-        self.running = True
-        self.btn_stop.config(state=tk.NORMAL)
-        
-        # En esta versión, el bucle principal controla la presentación
-        # No necesitamos usar after aquí
-    
-    def change_page(self):
-        """Cambia a la siguiente página en la presentación automática"""
-        if not self.running:
-            return
-            
-        self.next_page()
-        
-        # Si llegamos al final, volver al principio
-        if self.current_page >= len(self.pdf_document) - 1:
-            self.current_page = -1  # La próxima vez será 0
-        
-        # Programar la próxima actualización
-        self.root.after(1000, self.change_page)
-    
-    def stop_slideshow(self):
+    def stop(self):
         """Detiene la presentación automática"""
         self.running = False
-        
         if hasattr(self, 'btn_stop') and self.btn_stop:
             self.btn_stop.config(state=tk.DISABLED)
+    
+    def is_running(self):
+        """Devuelve True si la presentación está en marcha"""
+        return self.running
+    
+    def update(self):
+        """Actualiza la interfaz gráfica"""
+        try:
+            self.root.update_idletasks()
+            self.root.update()
+            return True
+        except tk.TclError:
+            # Ventana cerrada
+            return False
     
     def zoom_in(self):
         """Aumenta el nivel de zoom"""
@@ -266,6 +276,19 @@ class PDFViewer:
         """Actualiza la etiqueta con el porcentaje de zoom"""
         zoom_percent = int(self.zoom_factor * 100)
         self.zoom_label.config(text=f"{zoom_percent}%")
+    
+    def run_from_path(self, pdf_path=None):
+        """Inicia la aplicación con un PDF opcional"""
+        # Si se proporciona un path, cargar el PDF
+        if pdf_path and os.path.exists(pdf_path):
+            self.load_pdf(pdf_path)
+        
+        # Iniciar el bucle principal de Tkinter
+        try:
+            self.root.mainloop()
+        except KeyboardInterrupt:
+            # Manejar cierre por interrupción
+            self.stop()
     
     def __del__(self):
         """Destructor para cerrar el documento PDF"""

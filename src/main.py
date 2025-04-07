@@ -1,97 +1,103 @@
 import os
 import sys
 import time
-import tkinter as tk
-from tkinter import messagebox
+import cv2
 from PDFViewer import PDFViewer
+from hand_detector import HandGestureDetector
 
 def main():
     """
-    Función principal que inicializa la aplicación con un bucle while.
-    
-    Esta implementación usa un while True explícito para el control de la presentación,
-    en lugar de usar el sistema de eventos de tkinter.
+    Función principal que ejecuta el visor de PDF con detección de gestos.
+    Pasa a la siguiente diapositiva cuando se detecta el gesto de paz.
     """
-    # Verificar si se pasó un archivo como argumento
+    # Inicializar la cámara
+    cap = cv2.VideoCapture(0)  # 0 para la cámara predeterminada
+    if not cap.isOpened():
+        print("Error: No se pudo abrir la cámara.")
+        return
+    
+    # Crear el detector de gestos
+    detector = HandGestureDetector()
+    
+    # Crear el visor de PDF
+    viewer = PDFViewer()
+    
+    # Obtener la ruta del archivo de la línea de comandos si se proporciona
     pdf_path = None
     if len(sys.argv) > 1:
         pdf_path = sys.argv[1]
         # Verificar si el archivo existe
         if not os.path.exists(pdf_path):
             print(f"Error: No se encontró el archivo '{pdf_path}'")
-            pdf_path = None
-        # Verificar si es un PDF
         elif not pdf_path.lower().endswith('.pdf'):
             print(f"Error: El archivo '{pdf_path}' no es un PDF")
-            pdf_path = None
+        else:
+            # Cargar el PDF
+            viewer.load_pdf(pdf_path)
     
-    # Crear la ventana principal
-    root = tk.Tk()
+    # Variables para controlar el cambio de diapositivas
+    last_page_change_time = time.time()
+    cooldown_period = 2.0  # Tiempo de espera entre cambios de página por gesto (segundos)
+    peace_gesture_detected = False
     
-    # Modificar PDFViewer para que no use after() para la presentación
-    # Esto lo manejará nuestro bucle while
-    original_start_slideshow = PDFViewer.start_slideshow
-    original_change_page = PDFViewer.change_page
-    
-    def custom_start_slideshow(self):
-        if not self.pdf_document or self.running:
-            return
-        self.running = True
-        self.btn_stop.config(state=tk.NORMAL)
-        # No programamos cambio de página aquí, lo hará el bucle while
-    
-    def custom_change_page(self):
-        if not self.running:
-            return
-        self.next_page()
-        if self.current_page >= len(self.pdf_document) - 1:
-            self.current_page = -1  # La próxima vez será 0
-        # No programamos el siguiente cambio aquí, lo hará el bucle while
-    
-    # Reemplazar los métodos para que no usen after()
-    PDFViewer.start_slideshow = custom_start_slideshow
-    PDFViewer.change_page = custom_change_page
-    
-    # Inicializar la aplicación con la ruta del archivo (si existe)
-    app = PDFViewer(root, pdf_path)
-    
-    # Configurar el evento de redimensionado para ajustar las páginas al tamaño de la ventana
-    def on_resize(event):
-        if hasattr(app, 'pdf_document') and app.pdf_document:
-            app.show_current_page()
-    
-    root.bind("<Configure>", on_resize)
-    
-    # Bucle while simplificado, sin necesidad de variables de control de tiempo
-    
+    # Bucle principal que combina la detección de gestos y la presentación
     try:
-        # Bucle principal personalizado con while True
         while True:
-            # Actualizar la interfaz de tkinter (equivalente a mainloop pero controlado por nosotros)
-            root.update_idletasks()
-            root.update()
+            # Actualizar la interfaz gráfica
+            if not viewer.update():
+                break  # Salir si la ventana fue cerrada
             
-            # Si estamos en modo presentación, cambiar página después del sleep de 1 segundo
-            if app.running:
-                app.change_page()  # Nuestro método personalizado
-                
-            # Dormir simplemente 1 segundo entre cambios cuando estamos en modo presentación
-            if app.running:
-                time.sleep(1)  # Dormir exactamente 1 segundo
+            # Capturar frame de la cámara
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: No se pudo leer el frame de la cámara.")
+                break
+            
+            # Voltear horizontalmente para una visualización más intuitiva
+            frame = cv2.flip(frame, 1)
+            
+            # Detectar manos y dibujar landmarks
+            frame = detector.find_hands(frame)
+            
+            # Tiempo actual
+            current_time = time.time()
+            
+            # Verificar si se está haciendo el gesto de paz
+            if detector.is_doing_the_symbol(frame):
+                if not peace_gesture_detected and (current_time - last_page_change_time > cooldown_period):
+                    # Cambiar de página
+                    viewer.next()
+                    last_page_change_time = current_time
+                    peace_gesture_detected = True
             else:
-                # Si no estamos en presentación, solo una pausa pequeña para no saturar la CPU
-                time.sleep(0.1)
+                peace_gesture_detected = False
             
-    except tk.TclError as e:
-        # Capturar el error cuando se cierra la ventana
-        if 'application has been destroyed' not in str(e):
-            messagebox.showerror("Error", f"Se produjo un error: {str(e)}")
+            # Mostrar FPS
+            frame = detector.show_fps(frame)
+            
+            # Mostrar el frame con la detección
+            cv2.imshow("Detección de Gestos", frame)
+            
+            # Salir si se presiona la tecla 'q'
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            
+            # Si la presentación está en modo automático, cambiar de página cada segundo
+            if viewer.is_running() and (current_time - last_page_change_time > 1.0):
+                viewer.next()
+                last_page_change_time = current_time
+                time.sleep(2)
+            # Pequeña pausa para no saturar la CPU
+            time.sleep(0.01)
+                
+    except KeyboardInterrupt:
+        print("Programa interrumpido por el usuario")
     except Exception as e:
-        messagebox.showerror("Error", f"Se produjo un error: {str(e)}")
+        print(f"Error: {str(e)}")
     finally:
-        # Restaurar los métodos originales por si se necesita
-        PDFViewer.start_slideshow = original_start_slideshow
-        PDFViewer.change_page = original_change_page
+        # Liberar recursos
+        cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

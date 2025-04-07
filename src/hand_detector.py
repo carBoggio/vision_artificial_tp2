@@ -38,15 +38,16 @@ class HandGestureDetector:
         # Índice y medio arriba, anular y meñique abajo
         return index_up and middle_up and ring_closed and pinky_closed
     
-    def process_gestures(self, img):
+    def is_doing_the_symbol(self, img):
         """Detecta el gesto de paz en la imagen"""
         if self.results.multi_hand_landmarks:
             for hand_lms in self.results.multi_hand_landmarks:
                 if self.check_peace_sign(hand_lms):
                     cv2.putText(img, "SIGNO DE PAZ DETECTADO!", 
                               (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    return True  # Gesto de paz detectado
+        return False
         
-        return img
     
     def show_fps(self, img):
         """Muestra los FPS en la imagen"""
