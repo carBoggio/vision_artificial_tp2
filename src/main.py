@@ -80,7 +80,7 @@ def main():
                 time.sleep(1)  # Dormir exactamente 1 segundo
             else:
                 # Si no estamos en presentación, solo una pausa pequeña para no saturar la CPU
-                time.sleep(0.01)
+                time.sleep(0.1)
             
     except tk.TclError as e:
         # Capturar el error cuando se cierra la ventana
