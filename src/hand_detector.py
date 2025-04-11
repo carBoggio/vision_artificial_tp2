@@ -116,6 +116,50 @@ class HandGestureDetector:
         # Índice y medio arriba, anular y meñique abajo
         return index_up and middle_up and ring_closed and pinky_closed
     
+    def check_closed_fist(self, hand_landmarks):
+        """
+        Verifica si la mano está cerrada (puño) usando múltiples criterios:
+        1. Los dedos están doblados (las puntas están por debajo de las articulaciones)
+        2. La palma está cerrada
+        """
+        try:
+            # Puntos de las puntas de los dedos
+            finger_tips = [8, 12, 16, 20]  # Índice, medio, anular, meñique
+            # Puntos de las articulaciones medias (PIP)
+            pip_joints = [6, 10, 14, 18]
+            
+            # 1. Verificar que los dedos están doblados
+            fingers_bent = all(
+                hand_landmarks.landmark[tip].y > hand_landmarks.landmark[pip].y
+                for tip, pip in zip(finger_tips, pip_joints)
+            )
+            
+            # 2. Verificar que la palma está cerrada
+            # Usar los puntos de la palma (0, 1, 5, 9, 13, 17)
+            palm_points = [0, 1, 5, 9, 13, 17]
+            palm_coords = [hand_landmarks.landmark[i] for i in palm_points]
+            
+            # Calcular el plano de la palma usando los primeros 3 puntos
+            p1, p2, p3 = palm_coords[:3]
+            # Vector normal al plano
+            v1 = [p2.x - p1.x, p2.y - p1.y, p2.z - p1.z]
+            v2 = [p3.x - p1.x, p3.y - p1.y, p3.z - p1.z]
+            normal = np.cross(v1, v2)
+            normal = normal / np.linalg.norm(normal)
+            
+            # Verificar que los demás puntos de la palma están cerca del plano
+            palm_closed = all(
+                abs(np.dot([p.x - p1.x, p.y - p1.y, p.z - p1.z], normal)) < 0.1
+                for p in palm_coords[3:]
+            )
+            
+            # La mano está cerrada si cumple todos los criterios
+            return fingers_bent and palm_closed
+            
+        except Exception as e:
+            print(f"Error en check_closed_fist: {str(e)}")
+            return False
+
     def is_doing_the_symbol(self, img):
         """Detecta el gesto de paz en la imagen"""
         if self.results.multi_hand_landmarks:
@@ -124,6 +168,16 @@ class HandGestureDetector:
                     cv2.putText(img, "SIGNO DE PAZ DETECTADO!", 
                               (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     return True  # Gesto de paz detectado
+        return False
+
+    def is_closed_fist(self, img):
+        """Detecta el puño cerrado en la imagen"""
+        if self.results.multi_hand_landmarks:
+            for hand_lms in self.results.multi_hand_landmarks:
+                if self.check_closed_fist(hand_lms):
+                    cv2.putText(img, "PUÑO CERRADO DETECTADO!", 
+                              (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    return True  # Puño cerrado detectado
         return False
         
     def show_fps(self, img):

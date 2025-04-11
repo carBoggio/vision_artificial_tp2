@@ -39,6 +39,7 @@ def main():
     last_page_change_time = time.time()
     cooldown_period = 2.0  # Tiempo de espera entre cambios de página por gesto (segundos)
     open_hand_gesture_detected = False
+    closed_fist_gesture_detected = False
     
     # Bucle principal que combina la detección de gestos y la presentación
     try:
@@ -62,15 +63,25 @@ def main():
             # Tiempo actual
             current_time = time.time()
             
-            # Verificar si se está haciendo el gesto de paz
+            # Verificar si se está haciendo el gesto de paz (avanzar)
             if detector.is_doing_the_symbol(frame):
                 if not open_hand_gesture_detected and (current_time - last_page_change_time > cooldown_period):
-                    # Cambiar de página
+                    # Cambiar a la siguiente página
                     viewer.next()
                     last_page_change_time = current_time
                     open_hand_gesture_detected = True
             else:
                 open_hand_gesture_detected = False
+            
+            # Verificar si se está haciendo el puño cerrado (retroceder)
+            if detector.is_closed_fist(frame):
+                if not closed_fist_gesture_detected and (current_time - last_page_change_time > cooldown_period):
+                    # Cambiar a la página anterior
+                    viewer.prev()
+                    last_page_change_time = current_time
+                    closed_fist_gesture_detected = True
+            else:
+                closed_fist_gesture_detected = False
             
             # Mostrar FPS
             frame = detector.show_fps(frame)
