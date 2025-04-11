@@ -38,7 +38,7 @@ def main():
     # Variables para controlar el cambio de diapositivas
     last_page_change_time = time.time()
     cooldown_period = 2.0  # Tiempo de espera entre cambios de página por gesto (segundos)
-    peace_gesture_detected = False
+    open_hand_gesture_detected = False
     
     # Bucle principal que combina la detección de gestos y la presentación
     try:
@@ -56,27 +56,40 @@ def main():
             # Voltear horizontalmente para una visualización más intuitiva
             frame = cv2.flip(frame, 1)
             
-            # Detectar manos y dibujar landmarks
-            frame = detector.find_hands(frame)
+            # Detectar manos y obtener la posición del dedo índice
+            frame, index_pos = detector.find_hands(frame)
             
             # Tiempo actual
             current_time = time.time()
             
             # Verificar si se está haciendo el gesto de paz
             if detector.is_doing_the_symbol(frame):
-                if not peace_gesture_detected and (current_time - last_page_change_time > cooldown_period):
+                if not open_hand_gesture_detected and (current_time - last_page_change_time > cooldown_period):
                     # Cambiar de página
                     viewer.next()
                     last_page_change_time = current_time
-                    peace_gesture_detected = True
+                    open_hand_gesture_detected = True
             else:
-                peace_gesture_detected = False
+                open_hand_gesture_detected = False
             
             # Mostrar FPS
             frame = detector.show_fps(frame)
             
             # Mostrar el frame con la detección
             cv2.imshow("Detección de Gestos", frame)
+            
+            # Si se detectó una posición del dedo índice, actualizar el puntero láser
+            if index_pos is not None:
+                # Obtener las dimensiones del canvas del PDF
+                canvas_width = viewer.canvas.winfo_width()
+                canvas_height = viewer.canvas.winfo_height()
+                
+                # Escalar la posición del dedo al tamaño del canvas
+                x = int(index_pos[0] * canvas_width / frame.shape[1])
+                y = int(index_pos[1] * canvas_height / frame.shape[0])
+                
+                # Actualizar el puntero láser en el PDF
+                viewer.update_laser_pointer(x, y)
             
             # Salir si se presiona la tecla 'q'
             if cv2.waitKey(1) & 0xFF == ord('q'):

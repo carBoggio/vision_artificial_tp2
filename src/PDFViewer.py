@@ -19,6 +19,10 @@ class PDFViewer:
         self.running = False
         self.zoom_factor = 1.0
         
+        # Variables para el puntero láser
+        self.laser_points = []  # Lista para almacenar puntos del láser
+        self.max_laser_points = 10  # Número máximo de puntos para la cola del láser
+        
         # Interfaz gráfica
         self._setup_ui()
         
@@ -190,12 +194,41 @@ class PDFViewer:
             image=self.photo
         )
         
+        # Dibujar el puntero láser si hay puntos
+        self.draw_laser_pointer()
+        
         # Actualizar estado
         total_pages = len(self.pdf_document)
         self.status.config(text=f"Página {self.current_page + 1} de {total_pages}")
         
         # Actualizar la ventana
         self.root.update_idletasks()
+    
+    def update_laser_pointer(self, x, y):
+        """Actualiza la posición del puntero láser"""
+        if x is None or y is None:
+            # Si no hay posición del dedo índice, limpiar los puntos del láser
+            self.laser_points = []
+            return
+            
+        # Mantener solo el último punto
+        self.laser_points = [(x, y)]
+        
+        # Redibujar la página con el puntero
+        self.show_current_page()
+    
+    def draw_laser_pointer(self):
+        """Dibuja el puntero láser en el canvas"""
+        if not self.laser_points:
+            return
+            
+        # Solo dibujar el punto principal del láser
+        x, y = self.laser_points[-1]
+        self.canvas.create_oval(
+            x-5, y-5, x+5, y+5,
+            fill='red',
+            outline='red'
+        )
     
     def next(self):
         """Avanza a la siguiente página"""
