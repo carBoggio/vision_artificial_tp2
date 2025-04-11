@@ -14,9 +14,7 @@ class HandGestureDetector:
         # Variable para FPS
         self.p_time = 0
         
-        # Variables para el puntero láser
-        self.laser_points = []  # Lista para almacenar puntos del láser
-        self.max_laser_points = 10  # Número máximo de puntos para la cola del láser
+
     
     def find_hands(self, img):
         """Detecta manos en la imagen y dibuja los landmarks"""
@@ -59,42 +57,14 @@ class HandGestureDetector:
             x = max(0, min(x, w-1))
             y = max(0, min(y, h-1))
             
-            # Agregar el punto actual a la lista
-            self.laser_points.append((x, y))
-            
-            # Mantener solo los últimos N puntos
-            if len(self.laser_points) > self.max_laser_points:
-                self.laser_points.pop(0)
-            
-            # Dibujar la cola del láser solo si hay más de un punto
-            if len(self.laser_points) > 1:
-                for i in range(len(self.laser_points) - 1):
-                    # Verificar que los puntos existen
-                    if i >= len(self.laser_points) or i+1 >= len(self.laser_points):
-                        continue
-                        
-                    # Calcular el grosor basado en la posición en la cola
-                    thickness = max(1, int((i + 1) * 2 / len(self.laser_points)))
-                    # Calcular el color (rojo con transparencia)
-                    alpha = (i + 1) / len(self.laser_points)
-                    color = (0, 0, int(255 * alpha))
-                    
-                    # Obtener los puntos actuales
-                    pt1 = self.laser_points[i]
-                    pt2 = self.laser_points[i + 1]
-                    
-                    # Verificar que los puntos son válidos
-                    if pt1 is not None and pt2 is not None:
-                        # Dibujar la línea
-                        cv2.line(img, pt1, pt2, color, thickness)
-            
+
+
             # Dibujar el punto principal del láser
             cv2.circle(img, (x, y), 5, (0, 0, 255), -1)
             
         except Exception as e:
             print(f"Error en draw_laser_pointer: {str(e)}")
-            # Limpiar los puntos del láser en caso de error
-            self.laser_points = []
+         
     
     def check_open_hand(self, hand_landmarks):
         """
